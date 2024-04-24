@@ -1,0 +1,78 @@
+#include <cuda_runtime.h>
+#include <iostream>
+using namespace std;
+// Kernel function for matrix multiplication
+__global__ void matrixMultiply(int* A, int* B, int* C, int N) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (row < N && col < N) {
+        int result = 0;
+        for (int k = 0; k < N; k++) {
+            result += A[row * N + k] * B[k * N + col];
+        }
+        C[row * N + col] = result;
+    }
+}
+
+int main() {
+    // Matrix size
+    int N = 512;
+    int size = N * N * sizeof(int);
+    
+    // Allocate memory for matrices on host
+    int* A, * B, * C;
+    cudaMallocHost(&A, size);
+    cudaMallocHost(&B, size);
+    cudaMallocHost(&C, size);
+    
+    // Allocate memory for matrices on device
+    int* dev_A, * dev_B, * dev_C;
+    cudaMalloc(&dev_A, size);
+    cudaMalloc(&dev_B, size);
+    cudaMalloc(&dev_C, size);
+    
+    // Initialize matrices A and B
+    for (int i = 0; i < N; i++) {
+        for (int j = 0; j < N; j++) {
+            A[i * N + j] = i * N + j;
+            B[i * N + j] = j * N + i;
+        }
+    }
+    
+    // Copy matrices A and B from host to device
+    cudaMemcpy(dev_A, A, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(dev_B, B, size, cudaMemcpyHostToDevice);
+    
+    // Define grid and block dimensions
+    dim3 blockSize(16, 16);
+    dim3 gridSize((N + blockSize.x - 1) / blockSize.x, (N + blockSize.y - 1) / blockSize.y);
+    
+    // Launch kernel
+    matrixMultiply<<<gridSize, blockSize>>>(dev_A, dev_B, dev_C, N);
+    
+    // Copy result matrix C from device to host
+    cudaMemcpy(C, dev_C, size, cudaMemcpyDeviceToHost);
+    
+    // Print the result (first 10x10 elements)
+    for (int i = 0; i < 10; i++) {
+        for (int j = 0; j < 10; j++) {
+            std::cout << C[i * N + j] << " ";
+        }
+        std::cout << std::endl;
+    }
+    
+    // Free device memory
+    cudaFree(dev_A);
+    cudaFree(dev_B);
+    cudaFree(dev_C);
+    
+    // Free host memory
+    cudaFreeHost(A);
+    cudaFreeHost(B);
+    cudaFreeHost(C);
+    
+    return 0;
+}
+
+// nvcc filename.cu -o outputfile
